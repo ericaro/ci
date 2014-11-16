@@ -1,0 +1,106 @@
+package format;
+
+/*
+# protocol definition for *ci*
+
+
+We start defining some reusable Entities.
+
+## jobid
+
+Holds the identity for a job
+*/
+
+
+	message jobid {
+		required string    name    = 1;
+		required string    remote  = 2;
+		required string    branch  = 3;
+	}
+/*
+
+## Job
+
+a Job message contains the job identity, and information about the execution.
+
+*/
+	message job {
+		required jobid    id    = 1;
+		required execution refresh = 4;
+		required execution build   = 5;
+	}
+
+
+/*
+
+## Execution
+
+All information collected about executions (pull or build)
+
+*/
+	message execution {
+		required string version = 1 ;  // sha1, hex encoded, containing the sha1 of all subrepositories sha1
+		required int64  start   = 2 ;  // unixtimestamp of when the execution begun
+		required int64  end     = 3 ;  // unixtimestamp of when the execution ended
+		required int32  errcode = 4 ;  // execution error code
+		optional string result  = 5 ;  // console output (refresh or make)
+	}
+
+/* 
+
+# persistence
+
+the ciserver uses protobuf to persist data locally. It persists the "server" message.
+
+*/
+	message server {
+		repeated job jobs = 1;
+	}
+
+/*
+
+# protocol
+
+the ci protocol is mainly based on http request/response where request/response
+messages are passed in the body of the http message.
+
+A specific application/x-protobuf mime type is used.
+
+*/
+	message request {
+		optional listRequest    list    = 2 ; // request a list of jobs 
+		optional logRequest     log     = 3 ; // request a single job
+		optional addRequest     add     = 4 ; // request to add a job
+		optional removeRequest  remove  = 5 ; // request to remove a job
+	}
+
+	message response {
+		optional string       error = 1 ; // response error, if any.
+		optional listResponse list  = 2 ; // response for a list Request
+		optional logResponse  log   = 3 ; // response for a log request
+		//optional addResponse  add = 4 ;  //  there is no response for an Add (no error is enough)
+		//optional removeResponse  add = 4 ;  //  there is no response for a remove (no error is enough)
+	}
+
+	message listRequest {
+		optional bool refreshResult = 1 ; // true to include also result (output)
+		optional bool buildResult   = 2 ; // true to include also result (output)
+	}
+
+	message listResponse {
+		repeated job jobs   = 1 ; // all jobs requested
+	}
+
+	message logRequest {
+		required string jobname = 1 ; // the job name
+	}
+	message logResponse{
+		required job job = 1 ; // the job requested
+	}
+
+	message addRequest {
+		required jobid id = 1 ; // the job identity to be created.
+	}
+	message removeRequest {
+		required string jobname = 1 ; // the job unique name to remove
+	}
