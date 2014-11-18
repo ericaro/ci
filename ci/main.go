@@ -6,6 +6,7 @@ import (
 	"github.com/ericaro/ci/format"
 	"log"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 )
@@ -101,32 +102,52 @@ func main() {
 		// now present the resp
 		//
 		id := job.GetId()
-		fmt.Printf("%s (%s %s)\n", id.GetName(), id.GetRemote(), id.GetBranch())
+		fmt.Printf("LOG: %s  %s %s \n\n", id.GetName(), id.GetRemote(), id.GetBranch())
+
 		refresh := job.GetRefresh()
-		refreshLast := time.Unix(refresh.GetEnd(), 0)
-
-		var s string
-		switch {
-		case refresh.GetEnd() < refresh.GetStart():
-			s = "Pulling since"
-		case refresh.GetErrcode() != 0:
-			s = "Pulling Failed on"
-		default:
-			s = "Pull Success on"
-		}
-		fmt.Printf("%s %s\n%s\n", s, refreshLast.String(), refresh.GetResult())
-
+		refreshStart := time.Unix(refresh.GetStart(), 0)
+		refreshEnd := time.Unix(refresh.GetEnd(), 0)
 		build := job.GetBuild()
-		buildLast := time.Unix(build.GetEnd(), 0)
+		buildStart := time.Unix(build.GetStart(), 0)
+		buildEnd := time.Unix(build.GetEnd(), 0)
+
 		switch {
-		case build.GetEnd() < build.GetStart():
-			s = "Building since"
-		case build.GetErrcode() != 0:
-			s = "Building Failed on"
+		case refreshEnd.Before(refreshStart):
+			fmt.Printf("REFRESHING for %s\n\n", time.Since(refreshStart))
+		case refresh.GetErrcode() != 0:
+			fmt.Printf("REFRESH FAILED %s ago\n\n", time.Since(refreshEnd))
 		default:
-			s = "Build Success on"
+			fmt.Printf("REFRESH SUCCESS %s ago\n\n", time.Since(refreshEnd))
 		}
-		fmt.Printf("\n%s %s\n%s\n", s, buildLast.String(), build.GetResult())
+		fmt.Printf("\n%s\n", strings.Replace(refresh.GetResult(), "\n", "\n    ", -1))
+
+		fmt.Printf("\n\n")
+		if refreshStart.Before(refreshEnd) { // if refresh has finished, print the build
+
+			switch {
+			case buildEnd.Before(buildStart):
+				fmt.Printf("BUILDING for %s\n\n", time.Since(buildStart))
+			case build.GetErrcode() != 0:
+				fmt.Printf("BUILD FAILED %s ago\n\n", time.Since(buildEnd))
+			default:
+				fmt.Printf("BUILD SUCCESS %s ago\n\n", time.Since(buildEnd))
+			}
+			fmt.Printf("\n%s\n", strings.Replace(build.GetResult(), "\n", "\n    ", -1))
+
+			if buildStart.Before(buildEnd) { // if build has finished, print a summary
+
+				if refresh.GetErrcode() == 0 {
+					fmt.Printf("\033[00;32mrefresh success  %s ago\033[00m (%s)\n", time.Since(refreshEnd), refreshEnd.Sub(refreshStart))
+				} else {
+					fmt.Printf("\033[00;31mrefresh failed   %s ago\033[00m (%s)\n", time.Since(refreshEnd), refreshEnd.Sub(refreshStart))
+				}
+				if build.GetErrcode() == 0 {
+					fmt.Printf("\033[00;32mbuild   success  %s ago\033[00m (%s)\n", time.Since(buildEnd), buildEnd.Sub(buildStart))
+				} else {
+					fmt.Printf("\033[00;31mbuild   failed   %s ago\033[00m (%s)\n", time.Since(buildEnd), buildEnd.Sub(buildStart))
+				}
+			}
+		}
 
 	case "list":
 		if flag.NArg() != 1 {
