@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
-	"text/tabwriter"
 	"time"
 )
 
@@ -217,45 +216,68 @@ func (j *job) dorefresh(w io.Writer) error {
 	// now update recursively
 	fmt.Fprintf(w, "updating job's dependencies.\n")
 
+	// map to keep track of cloned repo (that don't need refresh)
+	cloned := make(map[string]bool)
 	ins, del := wk.WorkingDirPatches()
-	// the output will be fully tabbed
-	wr := tabwriter.NewWriter(w, 3, 8, 3, ' ', 0)
-	cloneerror := ins.Clone(true, wr)
-	pruneerror := del.Prune(true, wr)
-	wr.Flush()
-	if cloneerror != nil || pruneerror != nil {
-		if cloneerror == nil {
-			return pruneerror
-		}
-		if pruneerror == nil {
-			return cloneerror
-		}
-		// both errors
-		return fmt.Errorf("clone error: %s\nprune error: %s", cloneerror.Error(), pruneerror.Error())
+
+	var waiter sync.WaitGroup // to wait for all commands to return
+	var delCount, cloneCount int
+
+	for _, sbr := range ins {
+		waiter.Add(1)
+		go func(d mrepo.Subrepository) {
+			defer waiter.Done()
+			_, err := d.Clone()
+			if err != nil {
+				fmt.Printf("ERR  git clone %s -b %s %s:\n     %s\n", d.Rel(), d.Remote(), d.Branch(), d.Rel(), err.Error())
+			} else {
+				cloneCount++
+				fmt.Printf("     Cloning into '%s'...\n", d.Rel())
+			}
+		}(sbr)
 	}
+	for _, sbr := range del {
+		waiter.Add(1)
+		go func(d mrepo.Subrepository) {
+			defer waiter.Done()
+			err = sbr.Prune()
+			if err != nil {
+				fmt.Printf("ERR  rm -Rf %s :\n     %s\n", d.Rel(), d.Rel(), err.Error())
+			} else {
+				delCount++
+				fmt.Printf("     Pruning '%s'...\n", d.Rel())
+			}
+		}(sbr)
+	}
+	waiter.Wait()
+	fmt.Printf("Done (%v CLONE) (%v PRUNE)\n", cloneCount, delCount)
+
 	// struct is ok ! update all
 
 	fmt.Fprintf(w, "updating all dependencies themselves.\n")
 	var pullallerror error
-	var waiter sync.WaitGroup
+	var waiter2 sync.WaitGroup
 	for _, prj := range wk.WorkingDirSubpath() {
 		// it would be nice to git pull in async mode, really.
-		waiter.Add(1)
-		go func(prj string) {
-			defer waiter.Done()
-			fmt.Fprintf(w, "updating %s\n", prj)
-			res, err := mrepo.GitPull(prj)
-			fmt.Fprintln(w, res)
-			if err != nil {
-				if pullallerror == nil {
-					pullallerror = err
-				} else { //append it
-					pullallerror = fmt.Errorf("%s\npull error: %s", pullallerror, err)
+		if !cloned[prj] { // not a just cloned dependency, just a pull
+
+			waiter2.Add(1)
+			go func(prj string) {
+				defer waiter2.Done()
+				fmt.Fprintf(w, "updating %s\n", prj)
+				res, err := mrepo.GitPull(prj)
+				fmt.Fprintln(w, res)
+				if err != nil {
+					if pullallerror == nil {
+						pullallerror = err
+					} else { //append it
+						pullallerror = fmt.Errorf("%s\npull error: %s", pullallerror, err)
+					}
 				}
-			}
-		}(prj)
+			}(prj)
+		}
 	}
-	waiter.Wait()
+	waiter2.Wait()
 	fmt.Fprintf(w, "dependencies updated.\n")
 
 	if pullallerror != nil {
