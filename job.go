@@ -2,7 +2,6 @@ package ci
 
 import (
 	"bytes"
-	"crypto/sha1"
 	"fmt"
 	"github.com/ericaro/ci/format"
 	"github.com/ericaro/mrepo"
@@ -10,7 +9,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sort"
 	"sync"
 	"time"
 )
@@ -30,6 +28,15 @@ type job struct {
 	refresh  execution // info about the refresh execution
 	build    execution // info about the build execution
 	execLock sync.Mutex
+}
+
+func RunJobNow(name, remote, branch string) {
+	j := &job{name: name, remote: remote, branch: branch}
+	j.doRun()
+	fmt.Println(j.refresh.result.String())
+	fmt.Println(j.build.result.String())
+	fmt.Println("done")
+
 }
 
 //Marshal serialize all information into a format.Job object.
@@ -169,14 +176,14 @@ func (j *job) dobuild(w io.Writer) error {
 	}
 	fmt.Fprintf(w, "working dir: %s\n", wd)
 
-	fmt.Fprintf(w, "make ci\n")
+	fmt.Fprintf(w, "%s $ make ci\n", filepath.Join(wd, j.name))
 	return mrepo.Make(filepath.Join(wd, j.name), "ci", w)
 }
 
 //dorefresh actually run the refresh command, it is unsafe to call it without caution. It should only update errcode, and result
 func (j *job) dorefresh(w io.Writer) error {
 
-	// NB: this is  a mamouth function. I know it, but I wasn't able to
+	// NB: this is  a mammoth function. I know it, but I wasn't able to
 	// split it down before having done everything.
 	//
 	// Step by step I will extract subffunctions to appropriate set of objects
@@ -186,15 +193,12 @@ func (j *job) dorefresh(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "working dir: %s\n", wd)
-
-	pullneeded := true // unless we have just cloned the repo, we need to pull it
-	// lazily make the directory
+	var cloned bool
 	_, err = os.Stat(j.name)
 	if os.IsNotExist(err) { // target does not exist, make it.
 		fmt.Fprintf(w, "job dir does not exists. Will create one: %s\n", j.name)
-		pullneeded = false
 		result, err := mrepo.GitClone(wd, j.name, j.remote, j.branch)
+		cloned = true //
 		fmt.Fprintln(w, result)
 		if err != nil {
 			return err
@@ -203,131 +207,16 @@ func (j *job) dorefresh(w io.Writer) error {
 
 	wk := mrepo.NewWorkspace(filepath.Join(wd, j.name))
 
-	// ok dir exists (so it has been cloned)
-	if pullneeded {
-		fmt.Fprintf(w, "updating job's directory: %s\n", j.name)
-		result, err := mrepo.GitPull(j.name)
-		fmt.Fprintln(w, result)
+	if !cloned {
+		err := wk.PullTop(w)
 		if err != nil {
 			return err
 		}
 	}
-
-	// now update recursively
-	fmt.Fprintf(w, "updating job's dependencies.\n")
-
-	// map to keep track of cloned repo (that don't need refresh)
-	cloned := make(map[string]bool)
-	ins, del := wk.WorkingDirPatches()
-
-	var waiter sync.WaitGroup // to wait for all commands to return
-	var delCount, cloneCount int
-
-	for _, sbr := range ins {
-		waiter.Add(1)
-		go func(d mrepo.Subrepository) {
-			defer waiter.Done()
-			_, err := d.Clone()
-			if err != nil {
-				fmt.Printf("ERR  git clone %s -b %s %s:\n     %s\n", d.Rel(), d.Remote(), d.Branch(), d.Rel(), err.Error())
-			} else {
-				cloneCount++
-				fmt.Printf("     Cloning into '%s'...\n", d.Rel())
-			}
-		}(sbr)
+	digest, err := wk.Refresh(w)
+	if err != nil {
+		return err
 	}
-	for _, sbr := range del {
-		waiter.Add(1)
-		go func(d mrepo.Subrepository) {
-			defer waiter.Done()
-			err = sbr.Prune()
-			if err != nil {
-				fmt.Printf("ERR  rm -Rf %s :\n     %s\n", d.Rel(), d.Rel(), err.Error())
-			} else {
-				delCount++
-				fmt.Printf("     Pruning '%s'...\n", d.Rel())
-			}
-		}(sbr)
-	}
-	waiter.Wait()
-	fmt.Printf("Done (%v CLONE) (%v PRUNE)\n", cloneCount, delCount)
-
-	// struct is ok ! update all
-
-	fmt.Fprintf(w, "updating all dependencies themselves.\n")
-	var pullallerror error
-	var waiter2 sync.WaitGroup
-	for _, prj := range wk.WorkingDirSubpath() {
-		// it would be nice to git pull in async mode, really.
-		if !cloned[prj] { // not a just cloned dependency, just a pull
-
-			waiter2.Add(1)
-			go func(prj string) {
-				defer waiter2.Done()
-				fmt.Fprintf(w, "updating %s\n", prj)
-				res, err := mrepo.GitPull(prj)
-				fmt.Fprintln(w, res)
-				if err != nil {
-					if pullallerror == nil {
-						pullallerror = err
-					} else { //append it
-						pullallerror = fmt.Errorf("%s\npull error: %s", pullallerror, err)
-					}
-				}
-			}(prj)
-		}
-	}
-	waiter2.Wait()
-	fmt.Fprintf(w, "dependencies updated.\n")
-
-	if pullallerror != nil {
-		return pullallerror
-	}
-
-	fmt.Fprintf(w, "computing the current version.\n")
-	// now compute the sha1 of all sha1
-	//
-	all := make([]string, 0, 100)
-	//get all path, and sort them in alpha order
-	for _, x := range wk.WorkingDirSubpath() {
-		all = append(all, x)
-	}
-	sort.Sort(byName(all))
-
-	// now compute the sha1
-	var sha1error error
-	h := sha1.New()
-	for _, x := range all {
-		// compute the sha1 for x
-		version, err := mrepo.GitRevParseHead(x)
-		if err != nil {
-			if sha1error == nil {
-				sha1error = err
-			} else {
-				sha1error = fmt.Errorf("%s\n sha1 error: %s", sha1error, err)
-			}
-		} else {
-			fmt.Fprint(h, version)
-		}
-	}
-
-	v := h.Sum(nil)
-	fmt.Fprintf(w, "version is %x\n", v)
-	copy(j.refresh.version[:], v)
-	if sha1error != nil {
-		return sha1error
-	}
-	//job done: clone or pull the main repo
-	// clone or pull all subrepositories
-	// compute the sha1 of all sha1
-	// updated the result txt, and the
+	copy(j.refresh.version[:], digest)
 	return nil
-
 }
-
-//byName to sort any slice of Execution by their Name !
-type byName []string
-
-func (a byName) Len() int           { return len(a) }
-func (a byName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a byName) Less(i, j int) bool { return a[i] < a[j] }
