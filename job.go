@@ -126,6 +126,8 @@ func (j *job) Refresh() {
 	if err := j.dorefresh(j.refresh.result); err != nil {
 		j.refresh.errcode = -1 // no semantic here... yet
 		fmt.Fprintln(j.refresh.result, err.Error())
+	} else {
+		j.refresh.errcode = 0
 	}
 	log.Printf("Done refreshing job %s", j.name)
 }
@@ -164,6 +166,8 @@ func (j *job) Build() {
 	if err := j.dobuild(j.build.result); err != nil {
 		j.build.errcode = -1 // no semantic here... yet
 		fmt.Fprintln(j.build.result, err.Error())
+	} else {
+		j.build.errcode = 0
 	}
 	log.Printf("Done building job %s", j.name)
 
