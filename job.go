@@ -133,11 +133,6 @@ func (j *job) Refresh() {
 	j.execLock.Lock()
 	defer j.execLock.Unlock()
 
-	// can these happen ? we are under lock protection.
-	if j.refresh.end.Before(j.refresh.start) { // is running
-		return // does not run again, note that it shouldn't because we have a lock
-	}
-
 	//to start we refresh all information: buffer, and start time.
 	j.refresh.result = new(bytes.Buffer)
 	j.refresh.start = time.Now() // mark the job as started
@@ -161,27 +156,22 @@ func (j *job) Build() {
 	j.execLock.Lock()
 	defer j.execLock.Unlock()
 
-	// this should never happen
-	if j.build.end.Before(j.build.start) { // is running
-		return // does not run again
-	}
-
 	// check that the version has changed
-	/* temp deactivated
+	/* temp deactivated  */
 	if j.build.version == j.refresh.version {
 		// currently uptodate, nothing to do
 		log.Printf("job %s has already been built", j.name)
 		return
 	}
-	*/
+	/**/
 
 	// I'm gonna run
 	// I'm under the protection of the lock
 	// mark the version has built
 	j.build.result = new(bytes.Buffer)
-	j.build.version = j.refresh.version
 	j.build.start = time.Now() // mark the job as started
 	defer func() {
+		j.build.version = j.refresh.version
 		j.build.end = time.Now() // mark the job as ended at the end of this call.
 	}()
 
