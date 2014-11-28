@@ -7,19 +7,23 @@ import (
 	"github.com/ericaro/ci/format"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"syscall"
 )
 
 //Daemon defines the API for a Continuous Integration Server.
 type Daemon interface {
+	ServeHTTP(w http.ResponseWriter, r *http.Request)
+	// Heartbeats notifies the daemon of an incoming commit.
+	HeartBeats()
 	AddJob(path, remote, branch string) error
 	RemoveJob(path string) error
 	ListJobs(refreshResult, buildResult bool) *format.ListResponse
 	JobDetails(job string) *format.LogResponse
-	Run()
 	Marshal() *format.Server
 	Unmarshal(*format.Server) error
 }
@@ -97,8 +101,9 @@ func NewDaemon(wd, dbfile string) (daemon Daemon, err error) {
 
 // ci is a collection of jobs. It implements Server
 type ci struct {
-	jobs map[string]*job // path -> job
-	wd   string          // absolute path to the working dir
+	jobs       map[string]*job // path -> job
+	wd         string          // absolute path to the working dir
+	heartbeats int
 }
 
 // return a message describing the full details of a job.
@@ -107,6 +112,11 @@ func (c *ci) JobDetails(job string) *format.LogResponse {
 	return &format.LogResponse{
 		Job: j.Status(true, true),
 	}
+}
+
+// return a message describing the full details of a job.
+func (c *ci) Jobs() map[string]*job {
+	return c.jobs
 }
 
 //ListJobs return a format.ListResponse describing all jobs.
@@ -123,9 +133,9 @@ func (c *ci) ListJobs(refreshResult, buildResult bool) *format.ListResponse {
 	}
 }
 
-//Run launch a run on every job
-func (c *ci) Run() {
-
+//HeartBeat count incoming commits, and schedule a build
+func (c *ci) HeartBeats() {
+	c.heartbeats++
 	for _, j := range c.jobs {
 		j.Run() // I don't need to fork here, because Run() already handles that.
 	}
@@ -186,3 +196,50 @@ func (c *ci) Unmarshal(f *format.Server) error {
 	}
 	return nil
 }
+
+func (c *ci) JobMatrix() (jobs [][]*job) {
+	//skip trival case
+	if len(c.jobs) == 0 {
+		return nil
+	}
+	//get all jobs, in a slice, to sort them
+	var joblist = make([]*job, 0, len(c.jobs))
+	for _, v := range c.jobs {
+		joblist = append(joblist, v)
+	}
+	//sort by anme
+	sort.Sort(byName(joblist))
+
+	// now build up the job matrix
+
+	//nrows is the "squarest" number of rows
+	//nrows := int(math.Ceil(math.Sqrt(float64(len(c.jobs)))))
+	nrows := 3
+	// a temproary row is filled up to nrows items
+	var row = make([]*job, 0, nrows)
+	for i, v := range joblist {
+		if i > 0 && i%nrows == 0 { // we have reach the end of the row,
+			jobs = append(jobs, row)
+			row = make([]*job, 0, nrows)
+		}
+		row = append(row, v)
+	}
+	jobs = append(jobs, row)
+	return
+}
+
+func (c *ci) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	err := dashboard.Execute(w, c)
+	if err != nil {
+		log.Printf("Error Rendering template: %s", err.Error())
+		http.Error(w, "cannot serve http page", http.StatusInternalServerError)
+	}
+
+}
+
+//byName to sort any slice of Execution by their Name !
+type byName []*job
+
+func (a byName) Len() int           { return len(a) }
+func (a byName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a byName) Less(i, j int) bool { return a[i].name < a[j].name }

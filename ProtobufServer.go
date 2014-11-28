@@ -53,7 +53,7 @@ func (s *ProtobufServer) Execute(q *format.Request) *format.Response {
 			return &format.Response{Error: &msg}
 		}
 		// shedule a run after an Add
-		daemon.Run()
+		daemon.HeartBeats()
 		return &format.Response{}
 	case q.Remove != nil:
 		err := daemon.RemoveJob(q.Remove.GetJobname())
