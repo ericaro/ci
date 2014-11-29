@@ -16,7 +16,4 @@ func (s *HookServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// any incoming request here is a valid hook, and triggers a refresh / build
 		s.daemon.HeartBeats()
 	}
-	if r.Method == "GET" {
-		s.daemon.ServeHTTP(w, r)
-	}
 }

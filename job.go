@@ -39,29 +39,6 @@ func RunJobNow(name, remote, branch string) {
 
 }
 
-func (j *job) Version() string {
-	return fmt.Sprintf("%x", j.build.version)
-}
-func (j *job) IsRunning() bool {
-	var zero time.Time
-
-	return zero.Equal(j.refresh.start) || zero.Equal(j.build.start) || j.refresh.start.After(j.refresh.end) || j.build.start.After(j.build.end)
-}
-func (j *job) IsOk() bool {
-	return j.refresh.errcode == 0 && j.build.errcode == 0
-}
-func (j *job) Name() string { return j.name }
-func (j *job) CssClass() string {
-	switch {
-	case j.IsRunning():
-		return "running"
-	case j.IsOk():
-		return "success"
-	default:
-		return "failed"
-	}
-}
-
 //Marshal serialize all information into a format.Job object.
 func (j *job) Marshal() *format.Job { return j.Status(true, true) }
 

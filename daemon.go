@@ -7,17 +7,14 @@ import (
 	"github.com/ericaro/ci/format"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sort"
 	"syscall"
 )
 
 //Daemon defines the API for a Continuous Integration Server.
 type Daemon interface {
-	ServeHTTP(w http.ResponseWriter, r *http.Request)
 	// Heartbeats notifies the daemon of an incoming commit.
 	HeartBeats()
 	AddJob(path, remote, branch string) error
@@ -196,50 +193,3 @@ func (c *ci) Unmarshal(f *format.Server) error {
 	}
 	return nil
 }
-
-func (c *ci) JobMatrix() (jobs [][]*job) {
-	//skip trival case
-	if len(c.jobs) == 0 {
-		return nil
-	}
-	//get all jobs, in a slice, to sort them
-	var joblist = make([]*job, 0, len(c.jobs))
-	for _, v := range c.jobs {
-		joblist = append(joblist, v)
-	}
-	//sort by anme
-	sort.Sort(byName(joblist))
-
-	// now build up the job matrix
-
-	//nrows is the "squarest" number of rows
-	//nrows := int(math.Ceil(math.Sqrt(float64(len(c.jobs)))))
-	nrows := 3
-	// a temproary row is filled up to nrows items
-	var row = make([]*job, 0, nrows)
-	for i, v := range joblist {
-		if i > 0 && i%nrows == 0 { // we have reach the end of the row,
-			jobs = append(jobs, row)
-			row = make([]*job, 0, nrows)
-		}
-		row = append(row, v)
-	}
-	jobs = append(jobs, row)
-	return
-}
-
-func (c *ci) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	err := dashboard.Execute(w, c)
-	if err != nil {
-		log.Printf("Error Rendering template: %s", err.Error())
-		http.Error(w, "cannot serve http page", http.StatusInternalServerError)
-	}
-
-}
-
-//byName to sort any slice of Execution by their Name !
-type byName []*job
-
-func (a byName) Len() int           { return len(a) }
-func (a byName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a byName) Less(i, j int) bool { return a[i].name < a[j].name }
