@@ -166,14 +166,12 @@ func main() {
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 8, 1, '\t', 0)
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", "Status", "Name", "Remote", "Branch", "Refreshed", "Build Date", "Commit")
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", "Status", "Name", "Remote", "Branch", "Version")
 		for _, s := range resp.List.Jobs {
 			id := s.Id
 			refresh := s.Refresh
 			build := s.Build
-			refreshLast := time.Unix(refresh.GetEnd(), 0)
 			refreshFailed := refresh.GetErrcode() != 0
-			buildLast := time.Unix(build.GetEnd(), 0)
 			buildFailed := build.GetErrcode() != 0
 
 			uptodate := refresh.GetVersion() == build.GetVersion()
@@ -193,7 +191,7 @@ func main() {
 				status = "Success"
 			}
 
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", status, id.GetName(), id.GetRemote(), id.GetBranch(), refreshLast.String(), buildLast.String(), refresh.GetVersion())
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", status, id.GetName(), id.GetRemote(), id.GetBranch(), refresh.GetVersion())
 		}
 		w.Flush()
 	}
