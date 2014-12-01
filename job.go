@@ -42,6 +42,16 @@ func RunJobNow(name, remote, branch string) {
 //Marshal serialize all information into a format.Job object.
 func (j *job) Marshal() *format.Job { return j.Status(true, true) }
 
+func (j *job) State() Status {
+	if j.refresh.start.After(j.refresh.end) || j.build.start.After(j.build.end) {
+		return StatusRunning
+	}
+	if j.refresh.errcode == 0 && j.build.errcode == 0 {
+		return StatusOK
+	}
+	return StatusKO
+}
+
 //Status serialize information into a format.Job object.
 //
 // if withRrefresh, it will include the refresh output

@@ -30,7 +30,7 @@ func main() {
 
 func (d *Dashboard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/favicon.ico" {
-		_, err := w.Write(favico)
+		_, err := w.Write(favicon)
 		if err != nil {
 			log.Printf("Error Rendering favico: %s", err.Error())
 			http.Error(w, "template error: "+err.Error(), http.StatusInternalServerError)

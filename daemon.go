@@ -13,10 +13,20 @@ import (
 	"syscall"
 )
 
+type Status int
+
+const (
+	StatusKO      = 0
+	StatusRunning = 1
+	StatusOK      = 2
+)
+
 //Daemon defines the API for a Continuous Integration Server.
 type Daemon interface {
 	// Heartbeats notifies the daemon of an incoming commit.
 	HeartBeats()
+	//
+	Status() Status
 	AddJob(path, remote, branch string) error
 	RemoveJob(path string) error
 	ListJobs(refreshResult, buildResult bool) *format.ListResponse
@@ -109,6 +119,18 @@ func (c *ci) JobDetails(job string) *format.LogResponse {
 	return &format.LogResponse{
 		Job: j.Status(true, true),
 	}
+}
+
+func (c *ci) Status() Status {
+	for _, j := range c.jobs {
+		if j.State() == StatusKO {
+			return StatusKO
+		}
+		if j.State() == StatusRunning {
+			return StatusRunning
+		}
+	}
+	return StatusOK
 }
 
 // return a message describing the full details of a job.

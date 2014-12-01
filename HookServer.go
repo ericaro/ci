@@ -1,6 +1,7 @@
 package ci
 
 import (
+	"fmt"
 	"net/http"
 )
 
@@ -16,4 +17,10 @@ func (s *HookServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// any incoming request here is a valid hook, and triggers a refresh / build
 		s.daemon.HeartBeats()
 	}
+	if r.Method == "GET" {
+		status := fmt.Sprintf("%v", s.daemon.Status())
+		w.Write(([]byte)(status))
+
+	}
+
 }
