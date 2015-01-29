@@ -7,7 +7,11 @@ import (
 )
 
 var (
-	server = flag.String("s", "http://localhost:2020", "remote server address")
+	// you can build you own version of the exe using
+	//go install -ldflags '-X main.DefaultCIServer http://yourip:2020'
+
+	DefaultCIServer = "http://localhost:2020"
+	server          = flag.String("s", DefaultCIServer, "remote server address")
 )
 
 func main() {
