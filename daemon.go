@@ -2,15 +2,16 @@
 package ci
 
 import (
-	"code.google.com/p/goprotobuf/proto"
 	"fmt"
-	"github.com/ericaro/ci/format"
 	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+
+	"github.com/ericaro/ci/format"
+	"github.com/golang/protobuf/proto"
 )
 
 type Status int

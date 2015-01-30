@@ -2,9 +2,10 @@ package format
 
 import (
 	"bytes"
-	"code.google.com/p/goprotobuf/proto"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/golang/protobuf/proto"
 )
 
 const (
