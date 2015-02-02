@@ -3,14 +3,16 @@ package ci
 import (
 	"bytes"
 	"fmt"
-	"github.com/ericaro/ci/format"
-	"github.com/ericaro/mrepo"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/ericaro/ci/format"
+	"github.com/ericaro/mrepo"
+	"github.com/ericaro/mrepo/git"
 )
 
 //job is the main object in a ci. it represent a project to be build.
@@ -201,7 +203,7 @@ func (j *job) dorefresh(w io.Writer) error {
 	_, err = os.Stat(j.name)
 	if os.IsNotExist(err) { // target does not exist, make it.
 		fmt.Fprintf(w, "job dir does not exists. Will create one: %s\n", j.name)
-		result, err := mrepo.GitClone(wd, j.name, j.remote, j.branch)
+		result, err := git.Clone(wd, j.name, j.remote, j.branch)
 		cloned = true //
 		fmt.Fprintln(w, result)
 		if err != nil {
