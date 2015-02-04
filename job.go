@@ -199,12 +199,10 @@ func (j *job) dorefresh(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	var cloned bool
 	_, err = os.Stat(j.name)
 	if os.IsNotExist(err) { // target does not exist, make it.
 		fmt.Fprintf(w, "job dir does not exists. Will create one: %s\n", j.name)
 		result, err := git.Clone(wd, j.name, j.remote, j.branch)
-		cloned = true //
 		fmt.Fprintln(w, result)
 		if err != nil {
 			return err
@@ -212,14 +210,7 @@ func (j *job) dorefresh(w io.Writer) error {
 	}
 
 	wk := mrepo.NewWorkspace(filepath.Join(wd, j.name))
-
-	if !cloned {
-		err := wk.PullTop(w)
-		if err != nil {
-			return err
-		}
-	}
-	digest, err := wk.Refresh(w)
+	digest, err := wk.Checkout(w, true, true, false)
 	if err != nil {
 		return err
 	}
