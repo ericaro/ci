@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"flag"
@@ -9,11 +9,11 @@ import (
 	"github.com/ericaro/ci/format"
 )
 
-type addCmd struct{}
+type AddCmd struct{ Server *string }
 
-func (cmd *addCmd) Flags(fs *flag.FlagSet) *flag.FlagSet { return fs }
-func (cmd *addCmd) Run(args []string) {
-	c := format.NewClient(*server)
+func (cmd *AddCmd) Flags(fs *flag.FlagSet) *flag.FlagSet { return fs }
+func (cmd *AddCmd) Run(args []string) {
+	c := format.NewClient(*cmd.Server)
 	//ci add job remote branch
 	// TODO(ea) check arg count
 

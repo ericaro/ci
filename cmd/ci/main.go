@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 
+	"github.com/ericaro/ci/cmd"
 	"github.com/rakyll/command"
 )
 
@@ -16,13 +17,13 @@ var (
 
 func main() {
 	command.On("add",
-		"<name> <remote> <branch>: adds a job on the ci-daemon", &addCmd{}, nil)
+		"<name> <remote> <branch>: adds a job on the ci-daemon", &cmd.AddCmd{}, nil)
 	command.On("remove",
-		"<name>                  : removes a job", &removeCmd{}, nil)
+		"<name>                  : removes a job", &cmd.RemoveCmd{}, nil)
 	command.On("list",
-		"                        : lists jobs on the server", &listCmd{}, nil)
+		"                        : lists jobs on the server", &cmd.ListCmd{}, nil)
 	command.On("log",
-		"<name>                  : logs details about a job", &logCmd{}, nil)
+		"<name>                  : logs details about a job", &cmd.LogCmd{Server: server}, nil)
 
 	command.ParseAndRun()
 

@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"flag"
@@ -10,11 +10,11 @@ import (
 	"github.com/ericaro/ci/format"
 )
 
-type listCmd struct{}
+type ListCmd struct{ Server *string }
 
-func (cmd *listCmd) Flags(fs *flag.FlagSet) *flag.FlagSet { return fs }
-func (cmd *listCmd) Run(args []string) {
-	c := format.NewClient(*server)
+func (cmd *ListCmd) Flags(fs *flag.FlagSet) *flag.FlagSet { return fs }
+func (cmd *ListCmd) Run(args []string) {
+	c := format.NewClient(*cmd.Server)
 
 	if len(args) != 0 {
 		fmt.Printf("list command requires no arguments. Got %v\n", len(args))

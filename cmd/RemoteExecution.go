@@ -1,72 +1,17 @@
-package main
+package cmd
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/ericaro/ci/format"
 )
 
-type logCmd struct {
-	tail *bool
-}
-
-func (cmd *logCmd) Flags(fs *flag.FlagSet) *flag.FlagSet {
-	cmd.tail = fs.Bool("tail", false, "print the current job, and then poll for updates.")
-	return fs
-}
-func (cmd *logCmd) Run(args []string) {
-	if len(args) != 1 {
-		fmt.Printf("log command requires 1 arguments. Got %v\n", len(args))
-		flag.Usage()
-		os.Exit(-1)
-	}
-
-	jobname := args[0]
-
-	req := &format.Request{
-		Log: &format.LogRequest{
-			Jobname: &jobname,
-		},
-	}
-	b, r := cmd.GetJob(req)
-
-	fmt.Println(r.Print(), "\n")
-
-	if r.Done() { // if refresh has finished, print the build
-		fmt.Println(r.Summary())
-
-		fmt.Println(b.Print(), "\n")
-		if b.Done() { // if build has finished, print a summary
-			fmt.Println(b.Summary())
-		}
-	}
-
-	if *cmd.tail {
-		for _ = range time.Tick(2 * time.Second) {
-
-			newb, newr := cmd.GetJob(req)
-
-			fmt.Print(r.Tail(newr))
-			fmt.Print(b.Tail(newb))
-			b, r = newb, newr
-		}
-	} else { // when not in tail mode, always print out the summary for both refresh, and build
-		if b.start.After(r.end) {
-			fmt.Println("\n\n", r.Summary(), "\n", b.Summary())
-		} else {
-			fmt.Println("\n\n", b.Summary(), "\n", r.Summary())
-		}
-	}
-}
-
-func (cmd *logCmd) GetJob(req *format.Request) (b, r *exec) {
-	c := format.NewClient(*server)
+func GetRemoteExecution(remoteurl string, req *format.Request) (b, r *RemoteExecution) {
+	c := format.NewClient(remoteurl)
 	resp, err := c.Proto(req)
 	if err != nil {
 		log.Fatal(err.Error())
@@ -79,7 +24,7 @@ func (cmd *logCmd) GetJob(req *format.Request) (b, r *exec) {
 	return
 }
 
-type exec struct {
+type RemoteExecution struct {
 	x          *format.Execution
 	start, end time.Time
 	duration   time.Duration
@@ -87,8 +32,8 @@ type exec struct {
 	name       string
 }
 
-func newExec(px *format.Execution, name string) *exec {
-	x := exec{
+func newExec(px *format.Execution, name string) *RemoteExecution {
+	x := RemoteExecution{
 		x:    px,
 		name: name,
 	}
@@ -105,11 +50,15 @@ func newExec(px *format.Execution, name string) *exec {
 	return &x
 }
 
+func (x *RemoteExecution) StartAfter(z *RemoteExecution) bool {
+	return x.start.After(z.end)
+}
+
 // Done returns true when the execution is done
-func (x *exec) Done() bool { return x.end.After(x.start) }
+func (x *RemoteExecution) Done() bool { return x.end.After(x.start) }
 
 //Print returns a terminal friendly string representation of the current execution
-func (x *exec) Print() string {
+func (x *RemoteExecution) Print() string {
 	buf := new(bytes.Buffer)
 	switch {
 
@@ -129,8 +78,8 @@ func (x *exec) Print() string {
 	return buf.String()
 }
 
-//Tail returns changes between x (the assumed previous exec) and 'n' the new one
-func (x *exec) Tail(n *exec) string {
+//Tail returns changes between x (the assumed previous RemoteExecution) and 'n' the new one
+func (x *RemoteExecution) Tail(n *RemoteExecution) string {
 	// ALG:
 	// if same start then this is a diff otherwise this is a basic print
 	if x.Done() && !n.Done() {
@@ -153,7 +102,7 @@ func (x *exec) Tail(n *exec) string {
 }
 
 // Summary returns a small summary of the execution (status, duration and time since ended)
-func (x *exec) Summary() string {
+func (x *RemoteExecution) Summary() string {
 	if x.x.GetErrcode() == 0 {
 		return fmt.Sprintf("%s \033[00;32msuccess\033[00m in %s, %s ago", x.name, x.duration, x.since)
 	} else {
